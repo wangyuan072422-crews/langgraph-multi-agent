@@ -162,7 +162,8 @@ mysql -u root -p < scripts/init_business_db.sql
 .\.venv\Scripts\python.exe -m api.server
 ```
 
-打开 `http://127.0.0.1:8000/docs` 查看接口。
+打开 `http://127.0.0.1:8000/ui` 使用网页版，或打开
+`http://127.0.0.1:8000/docs` 查看接口。
 
 ## API
 

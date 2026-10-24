@@ -9,9 +9,11 @@ import logging
 import os
 from typing import Any
 
-import pymysql
+import pymysql # Python 连接 MySQL 数据库的驱动
+# StructuredTool：把普通 Python 函数封装成 LangChain 可识别的结构化工具
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, ValidationError, field_validator
+# DictCursor	让查询结果的每一行可以按字典形式读取
 from pymysql.cursors import DictCursor
 
 
@@ -22,15 +24,16 @@ JOB_APPLICATION_TOOL_NAME = "search_job_applications"
 
 # 允许的申请状态列表
 ALLOWED_APPLICATION_STATUSES = {
-    "draft",
-    "applied",
-    "interviewing",
-    "offer",
-    "rejected",
-    "withdrawn",
+    "draft", # 草稿
+    "applied", # 已投递
+    "interviewing", # 面试中
+    "offer", # 已获录用意向
+    "rejected", # 已被拒绝
+    "withdrawn", # 已撤回申请
 }
 
 # 它既用于生成工具参数 Schema 也用于真正执行查询前再次校验参数。
+# 规定查询工具允许接收哪些参数，并检查这些参数是否符合要求。
 class JobApplicationSearchInput(BaseModel):
     """只读查询工具接受的、经过校验的筛选条件。"""
     # 申请状态，可省略。
@@ -70,11 +73,13 @@ class JobApplicationSearchInput(BaseModel):
         # 空字符串和纯空格会被视为“没有提供状态”：
         if not normalized:
             return None
+        # 检查状态是否合法
         if normalized not in ALLOWED_APPLICATION_STATUSES:
             allowed = ", ".join(sorted(ALLOWED_APPLICATION_STATUSES))
             raise ValueError(f"status must be one of: {allowed}")
         return normalized
     # 处理 company role_keyword两个字段 Pydantic 会分别针对这两个字段调用该函数。
+    # normalize_optional_text()：规范化公司名和职位关键词
     @field_validator("company", "role_keyword", mode="before")
     @classmethod
     def normalize_optional_text(cls, value: Any) -> str | None:
@@ -86,15 +91,17 @@ class JobApplicationSearchInput(BaseModel):
         return normalized or None
 
 
+# _business_database_config()：读取数据库配置
 # 从环境变量构造 PyMySQL 连接参数。
 def _business_database_config() -> dict[str, Any]:
-    """从环境中读取专用的业务数据库配置。"""
+    """从环境变量读取 MySQL 连接配置，检查必填项和端口、超时参数，并返回一个配置字典。"""
     required_names = (
         "BUSINESS_DB_HOST",
         "BUSINESS_DB_USER",
         "BUSINESS_DB_PASSWORD",
         "BUSINESS_DB_DATABASE",
     )
+    # 读取配置 没有就放进missing中
     missing = [name for name in required_names if os.getenv(name) is None]
     if missing:
         raise ValueError(
@@ -118,15 +125,17 @@ def _business_database_config() -> dict[str, Any]:
         "port": port,
         "connect_timeout": connect_timeout,
         "autocommit": True,
-        "cursorclass": DictCursor,
+        "cursorclass": DictCursor, # 让查询结果的行以字典形式返回
     }
 
-
+# 真正连接 MySQL
 def _connect_business_database():
     """打开仅供单次只读工具调用使用的短连接。"""
     return pymysql.connect(**_business_database_config())
 
 
+# 将用户输入的文本转换为 SQL LIKE 模糊匹配模式，
+# 同时转义其中的特殊字符，尽量避免用户输入的 % 和 _ 被误当成通配符。
 def _like_pattern(value: str) -> str:
     """转义用户文本，使通配符字符作为普通筛选文本处理。"""
     escaped = value.replace("/", "//").replace("%", "/%").replace("_", "/_")
@@ -134,6 +143,7 @@ def _like_pattern(value: str) -> str:
 
 
 # 负责真正查询数据库。
+# 接收筛选条件 → 校验输入 → 生成 SQL → 连接数据库 → 执行查询 → 处理异常 → 返回结果。
 def search_job_applications(
     status: str | None = None,
     company: str | None = None,
@@ -142,6 +152,7 @@ def search_job_applications(
 ) -> dict[str, Any]:
     """通过固定的参数化 SELECT 查询已跟踪的求职申请。"""
     try:
+        # 校验成功后，filters 是 Pydantic 模型实例，其字段值经过规范化
         filters = JobApplicationSearchInput(
             status=status,
             company=company,
@@ -153,6 +164,7 @@ def search_job_applications(
             "ok": False,
             "error": "The business database is not configured or the query filters are invalid.",
         }
+
     # clauses 保存 SQL 条件，parameters 保存条件对应的参数值。
     # 目的：后续添加条件时，就可以统一使用 AND：
     clauses = ["1 = 1"]
@@ -183,10 +195,13 @@ def search_job_applications(
     try:
         # 数据库连接对象
         connection = _connect_business_database()
+        # connection.cursor():创建数据库游标
         # with：在代码块结束时，按上下文管理器的规则清理游标资源。
         with connection.cursor() as cursor:
             cursor.execute(sql, parameters)
             rows = list(cursor.fetchall() or [])
+    # cursor.fetchall():读取当前查询结果中的所有行。
+    # 由于连接配置使用了DictCursor 返回的每一行是一个字典
     # 用于处理 try 范围内抛出的 ValueError
     except ValueError:
         logger.warning("Business database query was rejected because configuration is invalid.")
@@ -213,11 +228,15 @@ def search_job_applications(
     }
 
 
-# 负责将查询函数包装成 Agent 可以使用的工具。
+# search_job_applications：传递函数对象。
+# search_job_applications()：立即调用函数，并取得它的返回值。
+
+
+# 负责将search_job_applications()这个Python函数包装成 Agent 可以使用的工具。
 def create_job_application_tool() -> StructuredTool:
     """创建暴露给数据库模型的唯一只读业务工具。"""
     return StructuredTool.from_function(
-        func=search_job_applications,
+        func=search_job_applications, # 告诉 LangChain：当这个工具被实际执行时，要调用哪个 Python 函数？
         name=JOB_APPLICATION_TOOL_NAME,
         description=(
             "Search the user's saved job applications. Use this for requests "
@@ -225,6 +244,7 @@ def create_job_application_tool() -> StructuredTool:
             "This tool is read-only and accepts filters instead of raw SQL."
         ),
         args_schema=JobApplicationSearchInput,
+    # 告诉 LangChain：这个工具允许接收什么参数，以及参数应该符合什么结构？
     )
 
 

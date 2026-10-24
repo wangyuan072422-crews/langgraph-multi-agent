@@ -47,6 +47,53 @@ _ROUTE_ALIASES = {
     "finish": "finish",
 }
 
+_DATABASE_REQUEST_TERMS = (
+    "求职申请",
+    "工作申请",
+    "申请记录",
+    "投递记录",
+    "申请进展",
+    "申请状态",
+    "job application",
+    "job applications",
+    "saved application",
+    "saved applications",
+    "tracked application",
+    "tracked applications",
+)
+
+_DATABASE_FOLLOW_UP_TERMS = (
+    "进展",
+    "状态",
+    "到哪一步",
+    "怎么样了",
+    "结果如何",
+    "status",
+    "progress",
+)
+
+
+def _explicit_database_route(messages: list[BaseMessage]) -> RouteName | None:
+    """Route explicit application-record requests without relying on the model."""
+    human_texts = [
+        str(message.content).casefold()
+        for message in messages
+        if getattr(message, "type", None) == "human"
+    ]
+    if not human_texts:
+        return None
+
+    latest_human_text = human_texts[-1]
+    if any(term in latest_human_text for term in _DATABASE_REQUEST_TERMS):
+        return "database_agent"
+
+    previous_context = " ".join(human_texts[:-1])
+    if any(term in previous_context for term in _DATABASE_REQUEST_TERMS) and any(
+        term in latest_human_text for term in _DATABASE_FOLLOW_UP_TERMS
+    ):
+        return "database_agent"
+    return None
+
 
 # 把各种写法的路由名称转换成标准名称
 def _normalize_route(value: Any) -> RouteName | None:
@@ -119,6 +166,12 @@ def create_supervisor_node(
             # 传入了测试函数，执行测试函数
             decision = route_decider(messages)
         else:
+            explicit_route = _explicit_database_route(messages)
+            if explicit_route is not None:
+                return _route_update(
+                    explicit_route,
+                    "The request explicitly asks for application records.",
+                )
             # 普通聊天模型 调用后通常返回自由文本
             routing_llm = llm or get_chat_llm()
             # 对模型进行输出约束，让模型输出符合 RouteDecision 的结构。

@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import ValidationError
 
 from agents.database_agent import (
@@ -69,6 +69,36 @@ class ToolCallingChatModel:
                 ],
             )
         return AIMessage(content="You have one applied backend role at Acme.")
+
+
+class TextualToolCallingChatModel:
+    def __init__(self, tool_args):
+        self.tool_args = tool_args
+        self.calls = []
+
+    def bind_tools(self, _tools):
+        return self
+
+    def invoke(self, messages):
+        self.calls.append(list(messages))
+        if len(self.calls) == 1:
+            return AIMessage(
+                content=json.dumps(
+                    {
+                        "name": "search_job_applications",
+                        "arguments": self.tool_args,
+                    }
+                )
+            )
+        return AIMessage(content="You have one applied backend role at Acme.")
+
+
+class NoToolCallingChatModel:
+    def bind_tools(self, _tools):
+        return self
+
+    def invoke(self, _messages):
+        return AIMessage(content="请稍等，我正在查询。")
 
 
 class DatabaseAgentToolTests(unittest.TestCase):
@@ -151,7 +181,7 @@ class DatabaseAgentToolTests(unittest.TestCase):
             }
 
         model = ToolCallingChatModel(
-            {"status": "applied", "company": "Acme", "limit": 3}
+            {"status": "applied", "company": "Acme", "limit": 1000}
         )
         node = create_database_agent_node(
             llm=model,
@@ -162,11 +192,9 @@ class DatabaseAgentToolTests(unittest.TestCase):
 
         self.assertEqual(executor_calls[0]["status"], "applied")
         self.assertEqual(executor_calls[0]["company"], "Acme")
+        self.assertEqual(executor_calls[0]["limit"], 25)
         self.assertEqual(len(model.bound_tools), 1)
-        self.assertIsInstance(model.calls[1][-1], ToolMessage)
-        tool_payload = json.loads(model.calls[1][-1].content)
-        self.assertTrue(tool_payload["ok"])
-        self.assertEqual(tool_payload["rows"][0]["company"], "Acme")
+        self.assertEqual(len(model.calls), 1)
         self.assertEqual(len(result["messages"]), 1)
         self.assertIsInstance(result["messages"][0], AIMessage)
         self.assertIn("Acme", result["messages"][0].content)
@@ -181,12 +209,78 @@ class DatabaseAgentToolTests(unittest.TestCase):
             query_executor=broken_executor,
         )
 
-        node({"messages": [HumanMessage(content="Show my applications")]})
+        result = node({"messages": [HumanMessage(content="Show my applications")]})
 
-        tool_message = model.calls[1][-1]
-        self.assertIsInstance(tool_message, ToolMessage)
-        self.assertIn("failed safely", tool_message.content)
-        self.assertNotIn("password should not leak", tool_message.content)
+        self.assertEqual(len(model.calls), 1)
+        self.assertIn("暂时无法读取", result["messages"][0].content)
+        self.assertNotIn("password should not leak", result["messages"][0].content)
+
+    def test_textual_tool_call_is_executed_and_returns_model_answer(self):
+        executor_calls = []
+
+        def fake_executor(**filters):
+            executor_calls.append(filters)
+            return {
+                "ok": True,
+                "count": 1,
+                "rows": [
+                    {
+                        "company": "Acme Cloud",
+                        "role_title": "AI Application Intern",
+                        "status": "interviewing",
+                        "applied_at": "2026-09-18 10:00:00",
+                    }
+                ],
+            }
+
+        model = TextualToolCallingChatModel({"company": "Acme"})
+        node = create_database_agent_node(
+            llm=model,
+            query_executor=fake_executor,
+        )
+
+        result = node({"messages": [HumanMessage(content="Show my Acme applications")]})
+
+        self.assertEqual(len(executor_calls), 1)
+        self.assertEqual(executor_calls[0]["company"], "Acme")
+        self.assertEqual(executor_calls[0]["limit"], 10)
+        self.assertEqual(len(model.calls), 1)
+        self.assertIn("查询到 1 条求职申请", result["messages"][0].content)
+        self.assertIn("Acme Cloud", result["messages"][0].content)
+        self.assertIn("面试中", result["messages"][0].content)
+
+    def test_missing_tool_call_uses_safe_database_fallback(self):
+        def fake_executor(**_filters):
+            return {
+                "ok": True,
+                "count": 2,
+                "rows": [
+                    {
+                        "company": "Acme Cloud",
+                        "role_title": "AI Application Intern",
+                        "status": "interviewing",
+                        "applied_at": "2026-09-18 10:00:00",
+                    },
+                    {
+                        "company": "Orbit Labs",
+                        "role_title": "Data Platform Intern",
+                        "status": "offer",
+                        "applied_at": "2026-08-30 09:15:00",
+                    },
+                ],
+            }
+
+        node = create_database_agent_node(
+            llm=NoToolCallingChatModel(),
+            query_executor=fake_executor,
+        )
+        result = node(
+            {"messages": [HumanMessage(content="其中 Acme Cloud 现在进展到哪一步了？")]}
+        )
+
+        self.assertIn("查询到 1 条求职申请", result["messages"][0].content)
+        self.assertIn("Acme Cloud", result["messages"][0].content)
+        self.assertNotIn("Orbit Labs", result["messages"][0].content)
 
 
 if __name__ == "__main__":

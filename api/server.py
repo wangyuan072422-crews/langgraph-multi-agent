@@ -7,11 +7,12 @@
 # 把异步生成器转换成 FastAPI 可以使用的生命周期上下文管理器。下面的 lifespan 依赖它。
 from contextlib import asynccontextmanager
 import json # 后面 /query/stream 把事件转换成 SSE 数据时使用。
+from pathlib import Path
 import uuid
 from typing import Literal, Optional # Optional：表示某个值可以是 None。
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
 from starlette.concurrency import iterate_in_threadpool, run_in_threadpool
@@ -40,6 +41,9 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Multi-Agent Career Assistant API", lifespan=lifespan)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+FRONTEND_INDEX = PROJECT_ROOT / "static" / "index.html"
 
 # 应用启动时按 CHECKPOINTER_BACKEND 创建一次，并在所有接口间共享。
 checkpointer = get_checkpointer()
@@ -179,6 +183,12 @@ def root():
         },
         "available_agents": ["business", "database"],
     }
+
+
+@app.get("/ui", include_in_schema=False)
+def frontend():
+    """Serve the dependency-free browser client."""
+    return FileResponse(FRONTEND_INDEX, media_type="text/html")
 
 
 @app.post("/query", response_model=QueryResponse)

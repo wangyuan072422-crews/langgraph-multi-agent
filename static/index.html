@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CareerGraph AI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #f4f6f8;
+      color: #17212b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(35, 111, 93, 0.12), transparent 32rem),
+        #f4f6f8;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      width: min(900px, 100%);
+      margin: 0 auto;
+      padding: 22px 20px 14px;
+      min-width: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .mark {
+      display: grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      border-radius: 10px;
+      background: #1e6b59;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 3px 0 0;
+      color: #637180;
+      font-size: 13px;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .new-chat {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 7px;
+      min-height: 38px;
+      padding: 0 13px;
+      border: 1px solid #d3dae0;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.82);
+      color: #344452;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .new-chat:hover {
+      border-color: #9aa8b3;
+      background: #fff;
+    }
+
+    .new-chat svg {
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-width: 2;
+    }
+
+    main {
+      width: min(900px, 100%);
+      margin: 0 auto;
+      padding: 0 20px;
+      overflow: hidden;
+    }
+
+    .chat {
+      height: 100%;
+      min-height: 320px;
+      padding: 22px 0;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
+    }
+
+    .message {
+      width: fit-content;
+      max-width: min(78ch, 86%);
+      margin-bottom: 18px;
+      padding: 13px 15px;
+      border-radius: 8px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .message.user {
+      margin-left: auto;
+      background: #1e6b59;
+      color: #fff;
+    }
+
+    .message.assistant {
+      border: 1px solid #e0e5e9;
+      background: #fff;
+      box-shadow: 0 4px 14px rgba(25, 42, 55, 0.04);
+    }
+
+    .message.error {
+      border-color: #e4b9b5;
+      background: #fff5f4;
+      color: #9b322a;
+    }
+
+    .message-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+      color: #687786;
+      font-size: 12px;
+    }
+
+    .tag {
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #e8f2ef;
+      color: #1e6b59;
+    }
+
+    .empty {
+      display: grid;
+      min-height: 260px;
+      place-items: center;
+      padding: 0 4px;
+      text-align: center;
+      color: #687786;
+    }
+
+    .empty > div {
+      max-width: 100%;
+    }
+
+    .empty strong {
+      display: block;
+      margin-bottom: 7px;
+      color: #263746;
+      font-size: 17px;
+    }
+
+    .composer-wrap {
+      width: min(900px, 100%);
+      margin: 0 auto;
+      padding: 10px 20px 22px;
+    }
+
+    .composer {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid #d5dce2;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 30px rgba(25, 42, 55, 0.08);
+    }
+
+    textarea {
+      flex: 1 1 auto;
+      width: 100%;
+      min-width: 0;
+      min-height: 42px;
+      max-height: 150px;
+      padding: 10px 9px;
+      resize: vertical;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      line-height: 1.5;
+    }
+
+    .send {
+      display: grid;
+      flex: 0 0 40px;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      border: 0;
+      border-radius: 8px;
+      background: #1e6b59;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .send:hover {
+      background: #175545;
+    }
+
+    .send:disabled {
+      cursor: wait;
+      opacity: 0.55;
+    }
+
+    .send svg {
+      width: 19px;
+      height: 19px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+    }
+
+    .hint {
+      margin: 7px 2px 0;
+      color: #7a8793;
+      font-size: 12px;
+    }
+
+    @media (max-width: 600px) {
+      header {
+        padding-top: 16px;
+      }
+
+      .subtitle {
+        display: none;
+      }
+
+      .new-chat {
+        width: 40px;
+        height: 40px;
+        min-height: 40px;
+        justify-content: center;
+        padding: 0;
+      }
+
+      .new-chat .label {
+        display: none;
+      }
+
+      .message {
+        max-width: 92%;
+      }
+
+      .composer-wrap {
+        padding-bottom: 14px;
+      }
+
+      .hint {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="mark" aria-hidden="true">C</div>
+      <div>
+        <h1>CareerGraph AI</h1>
+        <p class="subtitle">求职与面试多智能体助手</p>
+      </div>
+    </div>
+    <button class="new-chat" id="newChat" type="button" title="新对话" aria-label="新对话">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path d="M12 5v14M5 12h14"></path>
+      </svg>
+      <span class="label">新对话</span>
+    </button>
+  </header>
+
+  <main>
+    <section class="chat" id="chat" aria-live="polite">
+      <div class="empty" id="empty">
+        <div>
+          <strong>有什么可以帮你？</strong>
+          可以问求职准备、面试技巧，或查询你的求职申请。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="composer-wrap">
+    <form class="composer" id="composer">
+      <textarea
+        id="message"
+        name="message"
+        rows="1"
+        placeholder="输入你的问题..."
+        aria-label="消息"
+        autofocus
+      ></textarea>
+      <button class="send" id="send" type="submit" title="发送" aria-label="发送">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m22 2-7 20-4-9-9-4Z"></path>
+          <path d="M22 2 11 13"></path>
+        </svg>
+      </button>
+    </form>
+    <p class="hint">Enter 发送，Shift + Enter 换行</p>
+  </div>
+
+  <script>
+    const chat = document.querySelector("#chat");
+    const empty = document.querySelector("#empty");
+    const form = document.querySelector("#composer");
+    const input = document.querySelector("#message");
+    const send = document.querySelector("#send");
+    const newChat = document.querySelector("#newChat");
+
+    let threadId = null;
+    let busy = false;
+
+    const agentNames = {
+      business: "求职助手",
+      database: "数据助手",
+      finish: "助手",
+      unknown: "助手"
+    };
+
+    function addMessage(role, content, meta = {}) {
+      document.querySelector("#empty")?.remove();
+
+      const message = document.createElement("article");
+      message.className = `message ${role}`;
+
+      if (role === "assistant" && (meta.agentType || meta.status)) {
+        const messageMeta = document.createElement("div");
+        messageMeta.className = "message-meta";
+
+        const name = document.createElement("span");
+        name.textContent = agentNames[meta.agentType] || "助手";
+        messageMeta.append(name);
+
+        if (meta.status === "degraded") {
+          const status = document.createElement("span");
+          status.className = "tag";
+          status.textContent = "降级处理";
+          messageMeta.append(status);
+        }
+
+        message.append(messageMeta);
+      }
+
+      const text = document.createElement("div");
+      text.textContent = content;
+      message.append(text);
+      chat.append(message);
+      chat.scrollTop = chat.scrollHeight;
+      return message;
+    }
+
+    function setBusy(value) {
+      busy = value;
+      send.disabled = value;
+      input.disabled = value;
+      if (!value) input.focus();
+    }
+
+    function resetChat() {
+      if (busy) return;
+      threadId = null;
+      chat.replaceChildren();
+      const welcome = document.createElement("div");
+      welcome.className = "empty";
+      welcome.id = "empty";
+      welcome.innerHTML = "<div><strong>有什么可以帮你？</strong>可以问求职准备、面试技巧，或查询你的求职申请。</div>";
+      chat.append(welcome);
+      input.value = "";
+      input.focus();
+    }
+
+    async function submitMessage() {
+      const message = input.value.trim();
+      if (!message || busy) return;
+
+      addMessage("user", message);
+      input.value = "";
+      setBusy(true);
+      const pending = addMessage("assistant", "正在思考...", { status: "pending" });
+
+      try {
+        const payload = { message };
+        if (threadId) payload.thread_id = threadId;
+
+        const response = await fetch("/query/auto", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.detail || "请求失败，请稍后重试。");
+        }
+
+        threadId = data.thread_id;
+        pending.remove();
+
+        const responseNode = addMessage(
+          "assistant",
+          data.response || "服务没有返回内容。",
+          {
+            agentType: data.agent_type,
+            status: data.status
+          }
+        );
+        if (data.status === "error") {
+          responseNode.classList.add("error");
+        }
+      } catch (error) {
+        pending.remove();
+        const messageNode = addMessage(
+          "assistant",
+          error.message || "网络异常，请检查服务是否已启动。"
+        );
+        messageNode.classList.add("error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitMessage();
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        submitMessage();
+      }
+    });
+
+    newChat.addEventListener("click", resetChat);
+  </script>
+</body>
+</html>

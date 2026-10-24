@@ -14,7 +14,7 @@ from agents.business_agent import (
     KnowledgeChunk,
     create_business_agent_node,
 )
-from agents.supervisor import RouteDecision
+from agents.supervisor import RouteDecision, create_supervisor_node
 from graphs.application import SAFE_ERROR_MESSAGE, build_application_graph
 
 # 自动检查以前的功能有没有被改坏
@@ -118,6 +118,36 @@ def request_state(message: str, *, forced_agent: str | None = None) -> dict:
 
 # 测试类，继承 unittest.TestCase，提供断言和测试运行能力。
 class ApplicationGraphTests(unittest.TestCase):
+    def test_explicit_chinese_application_query_bypasses_the_model_router(self):
+        class FailingRouterModel:
+            def with_structured_output(self, _schema):
+                raise AssertionError("The model router must not decide this explicit route")
+
+        supervisor = create_supervisor_node(llm=FailingRouterModel())
+
+        result = supervisor(request_state("帮我查询所有求职申请。"))
+
+        self.assertEqual(result["next"], "database_agent")
+        self.assertEqual(result["status"], "ok")
+
+    def test_application_status_follow_up_bypasses_the_model_router(self):
+        class FailingRouterModel:
+            def with_structured_output(self, _schema):
+                raise AssertionError("The model router must not decide this follow-up")
+
+        supervisor = create_supervisor_node(llm=FailingRouterModel())
+        result = supervisor(
+            {
+                "messages": [
+                    HumanMessage(content="帮我查询所有求职申请。"),
+                    AIMessage(content="查询到 3 条求职申请。"),
+                    HumanMessage(content="其中 Acme Cloud 现在进展到哪一步了？"),
+                ]
+            }
+        )
+
+        self.assertEqual(result["next"], "database_agent")
+        self.assertEqual(result["status"], "ok")
 
     def test_manual_route_bypasses_supervisor(self):
         def fail_if_called(_messages):
